@@ -1,13 +1,17 @@
+use std::f32::consts::PI;
+
+use egui_macroquad::egui::Widget;
 use boids::*;
 use macroquad::prelude::*;
-use ::rand::{rngs::ThreadRng, Rng};
+use egui_macroquad::egui;
+use ::rand::rngs::ThreadRng;
 
-fn init(rng: &mut ThreadRng) -> (Params, Vec<Boid>) {
+fn reset(rng: &mut ThreadRng) -> (Params, Vec<Boid>) {
     // Initialise parameters and boid positions
     let params = Params::default();
-    let bounds = Bounds::whole_domain();
+    let bounds = Bounds {x_min: 0., x_max: screen_width(), y_min: 0., y_max: screen_height()};
     // Create boids
-    let num_boids = 50;
+    let num_boids = 200;
     let boids_pop: Vec<Boid> = (0..num_boids).map(|_| random_boid(rng, &bounds)).collect::<Vec<Boid>>();
     return (params, boids_pop);
 }
@@ -22,19 +26,24 @@ fn draw_fps(x: f32, y: f32, font_size: f32) {
     draw_text(format!("FPS: {}", fps).as_str(), x, y, font_size, c)
 }
 
+macro_rules! slider {
+    ($value:expr, $min:expr, $max:expr, $ui:expr) => {
+        egui::Slider::new($value, std::ops::RangeInclusive::new($min, $max)).ui($ui);
+    };
+}
+
 #[macroquad::main("Boids")]
 async fn main() {
     // For rendering the window
-    let mut window_width;
-    let mut window_height;
     // Set up initialisation
     let mut rng: ThreadRng = ::rand::thread_rng();
-    let (params, mut boids_pop) = init(&mut rng);
+    let (mut params, mut boids_pop) = reset(&mut rng);   
+    let window_color = egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255);
 
     loop {
         // Dynamic screen sizing
-        window_width = screen_width();
-        window_height = screen_height();
+        params.window_width = screen_width();
+        params.window_height = screen_height();
         clear_background(BLACK);
 
         // Update boids
@@ -42,18 +51,49 @@ async fn main() {
 
         // Render boids
         for boid in boids_pop.iter() {
-            let position = Vec2::from(boid.win_pos(window_width, window_height));
             let velocity = Vec2::new(boid.velocity.x, boid.velocity.y).normalize();
-            let angle = velocity.angle_between(Vec2::new(1.0, 0.0)).acos(); // Angle between velocity and x-axis
-
-            let cone_color = Color::from_rgba(50, 128, 230, 255);
-            draw_circle(position.x, position.y, 4., cone_color);
-            // draw_poly_lines(
-            //     position.x, position.y,
-            //     3, 10., angle, 1., cone_color)
+            let angle = velocity.y.atan2(velocity.x) * 180. / PI;
+            draw_poly(boid.position.x, boid.position.y, 3, 6., angle, boid.color);
         }
 
-        draw_fps(8., 8., 12.);
+        // EGUI Window
+        egui_macroquad::ui(|egui_ctx| {
+            egui::Window::new("Controls")
+                .frame(egui::Frame{fill: window_color, ..Default::default()})
+                .fixed_pos(egui::pos2(12., 24.))
+                .show(egui_ctx, |ui| {
+                    // Reset button
+                    if ui.button("Reset").clicked() {
+                        (params, boids_pop) = reset(&mut rng);
+                    }
+                    // Coherence
+                    ui.horizontal(|ui| {
+                        ui.label("Coherence");
+                        slider!(&mut params.centering_factor, 0., 0.01, ui);
+                    });
+                    // Separation
+                    ui.horizontal(|ui| {
+                        ui.label("Separation");
+                        slider!(&mut params.avoid_factor, 0., 0.1, ui);
+                    });
+                    // Alignment
+                    ui.horizontal(|ui| {
+                        ui.label("Alignment");
+                        slider!(&mut params.matching_factor, 0., 0.1, ui);
+                    });
+                    // Visual Range
+                    ui.horizontal(|ui| {
+                        ui.label("Visual Range");
+                        slider!(&mut params.visual_range, 3., 60., ui);
+                    });
+                });
+        });
+
+        // Draw EGUI
+        egui_macroquad::draw();
+
+        // Draw last macroquad
+        draw_fps(params.window_width - 120., 20., 32.);
         next_frame().await
     }
 }

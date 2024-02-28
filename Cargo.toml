@@ -6,5 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-macroquad = "0.4.4"
+egui-macroquad = { git = "https://github.com/optozorax/egui-macroquad.git" }
 rand = "0.8.5"
+macroquad = "0.4.4"
+quad-url = "0.1.0"

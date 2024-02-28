@@ -1,9 +1,6 @@
 use macroquad::prelude::*;
 use ::rand::{rngs::ThreadRng, Rng};
 
-// World size
-pub const X_SIZE: f32 = 100.;
-pub const Y_SIZE: f32 = 100.;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Boid {
@@ -16,79 +13,43 @@ impl Boid {
     pub fn speed(&self) -> f32 {
         self.velocity.length()
     }
-    // Scale positions to window size for drawing, divide by domain size
-    fn scale_position(&self, value: f32, window_size: f32) -> f32 {
-        value * window_size as f32
-    }
-
-    pub fn win_pos(&self, window_width: f32, window_height: f32) -> Vec2 {
-        vec2(
-            self.scale_position(self.position.x, window_width) / X_SIZE,
-            self.scale_position(self.position.y, window_height) / Y_SIZE,
-        )
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Params {
-    pub coherence: f32,
-    pub separation: f32,
+    pub centering_factor: f32,
+    pub min_distance: f32,
     pub avoid_factor: f32,
-    pub alignment: f32,
+    pub matching_factor: f32,
     pub visual_range: f32,
     pub speed_limit: f32,
     pub margin: Vec2,
     pub turn_factor: f32,
+    pub window_width: f32,
+    pub window_height: f32
 }
 
 impl Default for Params {
     fn default() -> Params {
         Params {
-            coherence: 0.05,
-            separation: 0.5,
+            centering_factor: 0.005,
+            min_distance: 20.,
             avoid_factor: 0.05,
-            alignment: 0.5,
-            visual_range: 10.,
-            speed_limit: 1.,
-            margin: vec2(0.01 * X_SIZE, 0.01 * Y_SIZE),
-            turn_factor: 100.,
+            matching_factor: 0.05,
+            visual_range: 30.,
+            speed_limit: 5.,
+            margin: vec2(50., 50.),
+            turn_factor: 1.,
+            window_width: 600.,
+            window_height: 400.
         }
     }
 }
 pub struct Bounds {
-    x_min: f32,
-    x_max: f32,
-    y_min: f32,
-    y_max: f32,
-}
-
-impl Bounds {
-    pub fn whole_domain() -> Self {
-        // Entire window is valid
-        Bounds {
-            x_min: 0.,
-            x_max: X_SIZE,
-            y_min: 0.,
-            y_max:Y_SIZE,
-        }
-    }
-}
-
-
-// Coordinate transforms
-pub fn win_to_world(vec: Vec2, window_width: f32, window_height: f32) -> Vec2 {
-    // Convert from window coordinates to world coords (between 0 and 1)
-    Vec2::new(
-        vec.x * X_SIZE / window_width,
-        vec.y * Y_SIZE / window_height,
-    )
-}
-
-pub fn world_to_win(vec: Vec2, window_width: f32, window_height: f32) -> Vec2 {
-    Vec2::new(
-        vec.x / X_SIZE * window_width,
-        vec.y / Y_SIZE * window_height,
-    )
+    pub x_min: f32,
+    pub x_max: f32,
+    pub y_min: f32,
+    pub y_max: f32,
 }
 
 // Numerics
@@ -105,17 +66,23 @@ pub fn rvec2_range(rng: &mut ThreadRng, bounds: &Bounds) -> Vec2 {
 }
 
 pub fn random_boid(rng: &mut ThreadRng, bounds: &Bounds) -> Boid {
+    let boid_colors = [
+        WHITE,
+        BLUE,
+        BROWN,
+        GOLD,
+        RED,
+        GREEN
+    ];
     Boid {
         position: rvec2_range(rng, &bounds),
         velocity: rvec2_range(rng, &Bounds{
             x_min: -5., x_max: 5.,
             y_min: -5., y_max: 5.,
         }),
-        color: WHITE  // later change
+        color: boid_colors[rng.gen_range(0..boid_colors.len())] // random
     }
 }
-
-// Helper functions
 
 // Helper functions
 fn distance(boid1: &Boid, boid2: &Boid) -> f32 {
@@ -151,13 +118,13 @@ fn flock_center(boids_pop: &Vec<Boid>) -> Vec2 {
 fn fly_towards_centre(boid: &mut Boid, params: &Params, boids_pop: &Vec<Boid>) {
     // Towards flock centre using coherence
     let center = flock_center(boids_pop);
-    boid.velocity += (center - boid.position) * params.coherence;
+    boid.velocity += (center - boid.position) * params.centering_factor;
 }
 
 fn avoid_others(boid: &mut Boid, params: &Params, boids_pop: &Vec<Boid>) {
     // No crashing using separation
     let avoidance_correction: Vec2 = boids_pop.iter()
-        .filter(|b2| distance(boid, b2) < params.separation)
+        .filter(|b2| distance(boid, b2) < params.min_distance)
         .fold(vec2(0., 0.),
             |acc, b2| acc + boid.position - b2.position);
     boid.velocity += avoidance_correction * params.avoid_factor;
@@ -167,7 +134,7 @@ fn match_velocity(boid: &mut Boid, params: &Params, boids_pop: &Vec<Boid>) {
     // Fly like the other boids using alignment
     let avg_velocity: Vec2 = boids_pop.iter()
         .fold(vec2(0., 0.), |acc, b2| acc + b2.velocity);
-    boid.velocity += (avg_velocity - boid.velocity) * params.alignment;
+    boid.velocity += (avg_velocity - boid.velocity) * params.matching_factor;
 }
 
 fn limit_speed(boid: &mut Boid, params:  &Params) {
@@ -183,13 +150,13 @@ fn keep_within_bounds(boid: &mut Boid, params: &Params) {
 
     if boid.position.x < params.margin.x {
         velocity_change.x += params.turn_factor;
-    } else if boid.position.x > X_SIZE - params.margin.x {
+    } else if boid.position.x > params.window_width - params.margin.x {
         velocity_change.x -= params.turn_factor;
     }
 
     if boid.position.y < params.margin.y {
         velocity_change.y += params.turn_factor;
-    } else if boid.position.y > Y_SIZE - params.margin.y {
+    } else if boid.position.y > params.window_height - params.margin.y {
         velocity_change.y -= params.turn_factor;
     }
 
@@ -203,10 +170,11 @@ pub fn update_boids(params: &Params, boids_pop: &Vec<Boid>) -> Vec<Boid> {
             let nearby_boids = boids_in_range(b1, params.visual_range, boids_pop);
             let mut new_b = *b1;
             fly_towards_centre(&mut new_b, params, &nearby_boids);
-            avoid_others(&mut new_b, params, &nearby_boids);
+            avoid_others(&mut new_b, params, boids_pop);
             match_velocity(&mut new_b, params, &nearby_boids);
             keep_within_bounds(&mut new_b, params);
             limit_speed(&mut new_b, params);
+            // new_b.velocity += rvec2_range(&mut rng, &Bounds {x_min: -1., x_max: 1., y_min: -1., y_max: 1.});
             new_b.position += new_b.velocity; // time step?
             new_b
         })

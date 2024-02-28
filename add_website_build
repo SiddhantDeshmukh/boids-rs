@@ -1,0 +1,3 @@
+#!/bin/bash
+cargo build --target wasm32-unknown-unknown --release
+cp target/wasm32-unknown-unknown/release/boids.wasm /mnt/c/Users/siddh/Documents/SiddhantDeshmukh.github.io/content/Coding\ Projects/boids.wasm
