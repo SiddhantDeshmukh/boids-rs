@@ -71,7 +71,6 @@ pub fn random_boid(rng: &mut ThreadRng, bounds: &Bounds) -> Boid {
         BLUE,
         BROWN,
         GOLD,
-        RED,
         GREEN
     ];
     Boid {

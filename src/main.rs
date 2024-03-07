@@ -32,6 +32,7 @@ macro_rules! slider {
     };
 }
 
+
 #[macroquad::main("Boids")]
 async fn main() {
     // For rendering the window
@@ -39,6 +40,7 @@ async fn main() {
     let mut rng: ThreadRng = ::rand::thread_rng();
     let (mut params, mut boids_pop) = reset(&mut rng);   
     let window_color = egui::Color32::from_rgba_unmultiplied(0, 0, 0, 255);
+    let mut is_paused = false;
 
     loop {
         // Dynamic screen sizing
@@ -47,13 +49,17 @@ async fn main() {
         clear_background(BLACK);
 
         // Update boids
-        boids_pop = update_boids(&params, &boids_pop);
+        if !is_paused {
+            boids_pop = update_boids(&params, &boids_pop);
+        }
 
         // Render boids
         for boid in boids_pop.iter() {
             let velocity = Vec2::new(boid.velocity.x, boid.velocity.y).normalize();
             let angle = velocity.y.atan2(velocity.x) * 180. / PI;
+            // draw_dinosaur(boid.position.x, boid.position.y, angle, boid.color);
             draw_poly(boid.position.x, boid.position.y, 3, 6., angle, boid.color);
+            
         }
 
         // EGUI Window
@@ -66,6 +72,8 @@ async fn main() {
                     if ui.button("Reset").clicked() {
                         (params, boids_pop) = reset(&mut rng);
                     }
+                    // Pause checkbox
+                    ui.checkbox(&mut is_paused, "Paused");
                     // Coherence
                     ui.horizontal(|ui| {
                         ui.label("Coherence");
